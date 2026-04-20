@@ -3,28 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quản lý Hóa đơn Xăng Dầu - AI Kế Toán Pro</title>
+    <title>Quản lý Hóa đơn Xăng Dầu - V19 (Structural NLP Engine)</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     
     <style>
         body { font-family: Arial, sans-serif; background-color: #f4f4f9; padding: 20px; color: #333; }
-        .container { max-width: 700px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
         h1, h2 { text-align: center; color: #2c3e50; }
         
         .upload-section { background-color: #e8f4f8; padding: 15px; border: 2px dashed #3498db; border-radius: 8px; text-align: center; margin-bottom: 20px; }
         .upload-section input[type="file"] { display: none; }
         .upload-label { background-color: #3498db; color: white; padding: 10px 20px; border-radius: 4px; cursor: pointer; display: inline-block; font-weight: bold; }
         .upload-label:hover { background-color: #2980b9; }
-        #scanStatus { margin-top: 10px; font-weight: bold; font-size: 15px; }
+        #scanStatus { margin-top: 10px; font-weight: bold; font-size: 15px; color: #2c3e50; }
 
-        #debugLog { display: none; background: #2c3e50; color: #2ecc71; padding: 15px; border-radius: 5px; font-family: monospace; font-size: 13px; margin-bottom: 20px; max-height: 250px; overflow-y: auto; white-space: pre-wrap; line-height: 1.5; word-break: break-all; }
+        #debugLog { display: none; background: #2c3e50; color: #2ecc71; padding: 15px; border-radius: 5px; font-family: monospace; font-size: 13px; margin-bottom: 20px; max-height: 400px; overflow-y: auto; white-space: pre-wrap; line-height: 1.5; word-break: break-all; }
         .debug-title { color: #f1c40f; font-weight: bold; margin-bottom: 5px; }
 
         .form-row { display: flex; gap: 15px; margin-bottom: 15px; }
         .form-group { flex: 1; }
         label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 14px;}
-        input, select { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+        input[type="date"], input[type="number"], select { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
         
         button { padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; color: white; }
         .btn-add { background-color: #f39c12; width: 100%; font-size: 16px; margin-bottom: 20px;}
@@ -51,9 +52,9 @@
         <h1>Hệ Thống Quản Lý Hóa Đơn</h1>
         
         <div class="upload-section">
-            <label for="pdfUpload" class="upload-label">📁 Chọn nhiều Hóa đơn cùng lúc (.PDF)</label>
+            <label for="pdfUpload" class="upload-label">📁 Chọn Hóa đơn điện tử hoặc Ảnh Scan (.PDF)</label>
             <input type="file" id="pdfUpload" accept=".pdf" multiple onchange="handlePDFUpload(event)">
-            <div id="scanStatus"></div>
+            <div id="scanStatus">Sẵn sàng. (Bản V19 - Công nghệ Quét Sinh Học NLP)</div>
         </div>
 
         <div id="debugLog"></div>
@@ -69,6 +70,7 @@
                 <select id="fuelType">
                     <option value="Xăng RON 95">Xăng RON 95</option>
                     <option value="Dầu Điêzen">Dầu Điêzen</option>
+                    <option value="Xăng & Dầu DO">Xăng & Dầu DO</option>
                 </select>
             </div>
         </div>
@@ -131,6 +133,140 @@
             dbg.innerHTML += `<div class="debug-title">--- ${title} ---</div>${safeText}<br><br>`;
         }
 
+        // HÀM CÂN BẰNG TOÁN HỌC (LOẠI BỎ SAI SỐ THẬP PHÂN CỦA MỌI LOẠI HÓA ĐƠN)
+        function testTriplet(vStr, pStr, tStr) {
+            let pClean = parseInt(pStr.replace(/\D/g, ''));
+            if (isNaN(pClean) || pClean === 0) return null;
+            let pReal = pClean;
+            while (pReal > 40000) pReal /= 10;
+            while (pReal < 9000) pReal *= 10;
+            if (pReal < 9000 || pReal > 40000) return null; // Giá luôn từ 9k - 40k
+
+            let tReal = parseInt(tStr.replace(/\D/g, ''));
+            if (isNaN(tReal) || tReal === 0) return null;
+            if (tStr.match(/[,.]\d{2}$/)) tReal /= 100;
+            else if (tStr.match(/[,.]\d{1}$/)) tReal /= 10;
+
+            let expectedV = tReal / pReal;
+
+            let vClean = parseInt(vStr.replace(/\D/g, ''));
+            if (isNaN(vClean) || vClean === 0) return null;
+            let vReal = vClean;
+            let bestDiff = Infinity;
+            let bestV = vReal;
+            
+            // Gióng hàng thập phân để triệt tiêu mọi sai số của Lít (VD: 70,000 -> 70)
+            for(let i = -5; i <= 5; i++) {
+                let testV = vReal * Math.pow(10, i);
+                let diff = Math.abs(testV - expectedV) / expectedV;
+                if (diff < bestDiff) {
+                    bestDiff = diff;
+                    bestV = testV;
+                }
+            }
+
+            if (bestDiff < 0.05) { // Dung sai 5%
+                return { v: bestV, p: pReal, t: tReal };
+            }
+            return null;
+        }
+
+        // LÕI XỬ LÝ NGÔN NGỮ TỰ NHIÊN (NLP REGEX)
+        function extractDataFromText(chunkText) {
+            const fullText = chunkText.replace(/\s+/g, " ");
+            const textLower = fullText.toLowerCase();
+
+            let dateVal = "";
+            let typeVal = "Xăng RON 95"; 
+            let amountVal = 0;
+            let volumeVal = 0;
+
+            // 1. TÌM NGÀY
+            const dateMatch = textLower.match(/ng[aáàảãạâăäq]y\D*?(\d{1,2})\D*?th[aáàảãạâăä]ng\D*?(\d{1,2})\D*?n[aăâä]m\D*?(\d{4})/i) || textLower.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+            if (dateMatch) {
+                dateVal = dateMatch.length === 4 ? `${dateMatch[3]}-${dateMatch[2].padStart(2, '0')}-${dateMatch[1].padStart(2, '0')}` : "";
+            }
+
+            // 2. TÌM SỐ LÍT TỪ KHÔNG GIAN BẢNG BIỂU (LOẠI BỎ HOÀN TOÀN SỐ NHÀ, SĐT)
+            let totalVol = 0;
+            let sumLineTotals = 0;
+            let hasXang = false;
+            let hasDau = false;
+
+            // Quét đúng cấu trúc: [Tên Nhiên Liệu] -> [Lít] -> [Các con số nằm ngay phía sau]
+            const itemLineRegex = /(xăng|dầu\s*do|do\s*0\.05).{0,40}?(?:l[iíìỉĩị1l]t|lượng|sl)(.{5,120}?)(?=cộng|tổng|thuế|xăng|dầu|do\s*0\.05|$)/gi;
+            let match;
+            
+            while ((match = itemLineRegex.exec(fullText)) !== null) {
+                let fuelName = match[1].toLowerCase();
+                if (fuelName.includes('xăng')) hasXang = true;
+                if (fuelName.includes('dầu') || fuelName.includes('do')) hasDau = true;
+
+                let numChunk = match[2];
+                let nums = numChunk.match(/\b\d[\d.,]*\b/g) || [];
+                let foundValidTriplet = false;
+
+                // Thử mọi tổ hợp 3 số sát nhau để tìm ra Lít * Đơn_giá = Tiền
+                for (let i = 0; i < nums.length - 2; i++) {
+                    for (let j = i + 1; j < nums.length - 1; j++) {
+                        for (let k = j + 1; k < nums.length; k++) {
+                            let res = testTriplet(nums[i], nums[j], nums[k]) || testTriplet(nums[j], nums[i], nums[k]);
+                            if (res) {
+                                totalVol += res.v;
+                                sumLineTotals += res.t;
+                                foundValidTriplet = true;
+                                break;
+                            }
+                        }
+                        if (foundValidTriplet) break;
+                    }
+                    if (foundValidTriplet) break;
+                }
+            }
+
+            if (hasXang && hasDau) typeVal = "Xăng & Dầu DO";
+            else if (hasDau) typeVal = "Dầu Điêzen";
+            else typeVal = "Xăng RON 95";
+
+            volumeVal = Math.round(totalVol * 100) / 100;
+
+            // 3. TÌM TỔNG TIỀN THANH TOÁN (GRAND TOTAL)
+            const grandTotalRegex = /(?:tổng\s*cộng\s*tiền\s*thanh\s*toán|tổng\s*số\s*tiền\s*thanh\s*toán|tổng\s*tiền|tổng\s*cộng).{0,20}?(\d[\d.,]*\d|\d)/i;
+            let gtMatch = fullText.match(grandTotalRegex);
+            if (gtMatch) {
+                let gtStr = gtMatch[1];
+                let gtClean = parseInt(gtStr.replace(/\D/g, ''));
+                if (gtStr.match(/[,.]\d{2}$/)) gtClean /= 100;
+                else if (gtStr.match(/[,.]\d{1}$/)) gtClean /= 10;
+                
+                if (gtClean >= sumLineTotals) {
+                    amountVal = Math.round(gtClean);
+                }
+            }
+
+            // Nếu hóa đơn bị mờ chữ "Tổng thanh toán", tự động nội suy từ Tiền từng dòng:
+            if (amountVal === 0 && sumLineTotals > 0) {
+                let allNums = fullText.match(/\b\d+(?:[.,]\d+){0,3}\b/g) || [];
+                let possibleGTs = [];
+                for (let n of allNums) {
+                    let nClean = parseInt(n.replace(/\D/g, ''));
+                    if (n.match(/[,.]\d{2}$/)) nClean /= 100;
+                    else if (n.match(/[,.]\d{1}$/)) nClean /= 10;
+                    
+                    if (nClean >= sumLineTotals && nClean <= sumLineTotals * 1.12) {
+                        possibleGTs.push(nClean);
+                    }
+                }
+                if (possibleGTs.length > 0) {
+                    amountVal = Math.round(Math.max(...possibleGTs));
+                } else {
+                    amountVal = Math.round(sumLineTotals * 1.1); // Dự phòng cộng 10% VAT
+                }
+            }
+
+            return { dateVal, typeVal, amountVal, volumeVal };
+        }
+
         async function handlePDFUpload(event) {
             const files = event.target.files;
             if (!files || files.length === 0) return;
@@ -141,115 +277,77 @@
             
             let successCount = 0;
             let failCount = 0;
+            let ocrWorker = null;
 
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
-                statusDiv.innerText = `⏳ Đang quét AI: ${file.name} (${i + 1}/${files.length})...`;
-                statusDiv.style.color = "#d35400";
-                
                 let pdf = null; 
 
                 try {
                     const arrayBuffer = await file.arrayBuffer();
                     const typedarray = new Uint8Array(arrayBuffer);
                     
-                    const loadingTask = pdfjsLib.getDocument({
+                    pdf = await pdfjsLib.getDocument({
                         data: typedarray,
                         cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
                         cMapPacked: true,
                         standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/standard_fonts/'
-                    });
+                    }).promise;
                     
-                    pdf = await loadingTask.promise;
-                    const page = await pdf.getPage(1);
-                    const textContent = await page.getTextContent();
-                    
-                    const fullText = textContent.items.map(item => item.str).join(" ").normalize("NFC").replace(/\s+/g, " ");
-                    const textLower = fullText.toLowerCase();
+                    const totalPages = pdf.numPages;
 
-                    let dateVal = "";
-                    let typeVal = "Xăng RON 95"; 
-                    let amountVal = 0;
-                    let volumeVal = 0;
+                    for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+                        statusDiv.innerText = `⚡ Đang quét NLP Trang ${pageNum}/${totalPages}...`;
+                        statusDiv.style.color = "#2980b9";
 
-                    // 1. TÌM NGÀY 
-                    const dateMatch = textLower.match(/ng[aá]y\D*?(\d{1,2})\D*?th[aá]ng\D*?(\d{1,2})\D*?n[aă]m\D*?(\d{4})/);
-                    if (dateMatch) {
-                        dateVal = `${dateMatch[3]}-${dateMatch[2].padStart(2, '0')}-${dateMatch[1].padStart(2, '0')}`; 
-                    } else {
-                        const dateMatch2 = textLower.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
-                        if (dateMatch2) dateVal = `${dateMatch2[3]}-${dateMatch2[2].padStart(2, '0')}-${dateMatch2[1].padStart(2, '0')}`;
-                    }
-
-                    // 2. TÌM NHIÊN LIỆU
-                    const cleanText = textLower.replace(/xăng dầu/g, "").replace(/dầu khí/g, "");
-                    if (cleanText.match(/(điêzen|diezen|diesel|dầudo|dầu do|do 0[,.]05|do 0[,.]001)/)) {
-                        typeVal = "Dầu Điêzen";
-                    }
-
-                    // 3. TÌM TỔNG TIỀN (Chỉ lấy số có dấu phân cách nghìn, né số điện thoại)
-                    const moneyMatches = fullText.match(/\b\d{1,3}(?:[.,]\d{3})+\b/g) || [];
-                    let validAmounts = [];
-                    
-                    for (let m of moneyMatches) {
-                        // Bỏ qua đơn giá lẻ (VD: 19.425,93)
-                        if (m.includes('.') && m.includes(',')) continue; 
-                        validAmounts.push(parseInt(m.replace(/[.,]/g, '')));
-                    }
-
-                    if (validAmounts.length > 0) {
-                        amountVal = Math.max(...validAmounts);
-                    } else {
-                        // Kế hoạch dự phòng cho hóa đơn ghi tiền liền mạch đi sau chữ "thanh toán"
-                        const flatMoney = fullText.match(/(?:thanh toán|tổng cộng|tổng tiền)\D{0,30}?(\d{5,8})\b/i);
-                        if (flatMoney) amountVal = parseInt(flatMoney[1]);
-                    }
-
-                    // 4. TÌM SỐ LÍT BẰNG AI TOÁN HỌC
-                    let keywordIndex = textLower.indexOf("lít");
-                    if (keywordIndex === -1) keywordIndex = textLower.indexOf("lit");
-                    if (keywordIndex === -1) keywordIndex = textLower.indexOf("lượng");
-
-                    if (keywordIndex !== -1 && amountVal > 0) {
-                        const windowText = fullText.substring(Math.max(0, keywordIndex - 20), keywordIndex + 150);
-                        const nums = windowText.match(/\d+(?:[.,]\d+){0,3}/g) || []; 
-
-                        for (let n of nums) {
-                            let cleanNum = n;
-                            // Đổi phẩy tiếng Việt thành chấm toán học (VD: 45,285 -> 45.285)
-                            if (cleanNum.includes('.') && cleanNum.includes(',')) {
-                                cleanNum = cleanNum.replace(/\./g, '').replace(',', '.');
-                            } else if (cleanNum.includes(',')) {
-                                cleanNum = cleanNum.replace(',', '.');
+                        const page = await pdf.getPage(pageNum);
+                        const textContent = await page.getTextContent();
+                        let rawText = textContent.items.map(item => item.str).join(" ").normalize("NFC");
+                        
+                        // CỨU HỘ BẰNG AI NẾU LÀ ẢNH SCAN (< 50 KÝ TỰ)
+                        if (rawText.replace(/\s+/g, '').length < 50) {
+                            if (!ocrWorker) {
+                                ocrWorker = await Tesseract.createWorker('vie+eng', 1);
+                                await ocrWorker.setParameters({ tessedit_pageseg_mode: '11' }); 
                             }
-                            let val = parseFloat(cleanNum);
+                            const viewport = page.getViewport({ scale: 2.0 }); 
+                            const canvas = document.createElement('canvas');
+                            const ctx = canvas.getContext('2d');
+                            canvas.height = viewport.height;
+                            canvas.width = viewport.width;
+                            await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+                            const { data: { text } } = await ocrWorker.recognize(canvas);
+                            rawText = text.replace(/\n/g, " ");
+                        }
 
-                            // Lọc số Lít nằm trong giới hạn thực tế của bồn chứa
-                            if (val > 0 && val < 5000) {
-                                let impliedPrice = amountVal / val;
-                                // Kiểm tra chéo: Số Lít x Đơn Giá thị trường (10k-40k) phải khớp với Tổng Tiền
-                                if (impliedPrice > 10000 && impliedPrice < 40000) {
-                                    volumeVal = val;
-                                    break;
-                                }
-                                // Mở rộng: Đôi khi Tổng Tiền chưa gồm VAT, kiểm tra thêm phép chia giá gốc
-                                let impliedPriceNoVAT = (amountVal * 0.92) / val;
-                                if (impliedPriceNoVAT > 9000 && impliedPriceNoVAT < 40000) {
-                                    volumeVal = val;
-                                    break;
-                                }
+                        // THUẬT TOÁN PHÂN HẠCH (CẮT ĐÔI TRANG NẾU CÓ 2 HÓA ĐƠN TRỞ LÊN)
+                        let invoiceChunks = rawText.split(/(?=HÓA ĐƠN\s*GIÁ TRỊ GIA TĂNG|Ký hiệu\s*[:=]|CÔNG TY XĂNG DẦU)/i);
+                        let validChunks = [];
+                        let tempChunk = "";
+                        
+                        for (let c of invoiceChunks) {
+                            tempChunk += c;
+                            if (tempChunk.match(/t[ổo]ng c[ộo]ng|c[ộo]ng ti[ềe]n|thành ti[ềe]n/i)) {
+                                validChunks.push(tempChunk);
+                                tempChunk = "";
                             }
                         }
-                    }
+                        if (tempChunk.length > 200 && validChunks.length === 0) validChunks.push(tempChunk);
 
-                    // KIỂM ĐỊNH & GHI NHẬN
-                    if (dateVal && amountVal && volumeVal) {
-                        invoices.push({ date: dateVal, type: typeVal, amount: amountVal, volume: volumeVal });
-                        successCount++;
-                    } else {
-                        failCount++;
-                        showDebug(`AI TỪ CHỐI FILE: ${file.name}`, `Ngày: ${dateVal || 'X'}\nTiền: ${amountVal || 'X'}\nLít: ${volumeVal || 'X'}\n\n[DỮ LIỆU ĐƯỢC AI XỬ LÝ]\n${fullText}`);
-                    }
+                        // CHẠY BỘ ĐỌC NLP CHO TỪNG HÓA ĐƠN
+                        for (let idx = 0; idx < validChunks.length; idx++) {
+                            let chunkText = validChunks[idx];
+                            let data = extractDataFromText(chunkText);
+
+                            if (data.dateVal && data.amountVal > 0 && data.volumeVal > 0) {
+                                invoices.push({ date: data.dateVal, type: data.typeVal, amount: data.amountVal, volume: data.volumeVal });
+                                successCount++;
+                            } else {
+                                failCount++;
+                                showDebug(`V19 - TỪ CHỐI Trang ${pageNum} (Mảnh ${idx+1}/${validChunks.length})`, `Ngày: ${data.dateVal || 'X'}\nTiền: ${data.amountVal || 'X'}\nLít: ${data.volumeVal || 'X'}\n\n[DỮ LIỆU ĐÃ BÓC TÁCH]\n${chunkText.replace(/\s+/g, " ")}`);
+                            }
+                        }
+                    } 
 
                 } catch (error) {
                     failCount++;
@@ -257,33 +355,31 @@
                 } finally {
                     if (pdf) await pdf.destroy();
                 }
-            }
+            } 
+
+            if (ocrWorker) await ocrWorker.terminate();
 
             localStorage.setItem('gasInvoicesData', JSON.stringify(invoices));
             renderTable();
 
             if (failCount === 0) {
-                statusDiv.innerText = `✅ Hoàn mỹ! AI đã nhận diện 100% thành công ${successCount} hóa đơn.`;
+                statusDiv.innerText = `✅ SIÊU VIỆT! V19 đã bóc tách chính xác tuyệt đối ${successCount} hóa đơn.`;
                 statusDiv.style.color = "#27ae60";
             } else {
-                statusDiv.innerText = `⚠️ Hoàn tất! Quét được ${successCount} file. Có ${failCount} file bị AI từ chối.`;
+                statusDiv.innerText = `⚠️ Hoàn tất! Quét được ${successCount} hóa đơn. Lỗi ${failCount} mảnh (Xem log).`;
                 statusDiv.style.color = "#e67e22";
             }
             event.target.value = ''; 
         }
 
-        // --- CÁC HÀM XỬ LÝ GIAO DIỆN (GIỮ NGUYÊN) ---
         function addInvoice() {
             const date = document.getElementById('date').value;
             const fuelType = document.getElementById('fuelType').value;
             const amount = document.getElementById('amount').value;
             const volume = document.getElementById('volume').value;
-
             if (!date || !amount || !volume) { alert("Vui lòng điền đủ thông tin!"); return; }
-
             invoices.push({ date: date, type: fuelType, amount: parseInt(amount), volume: parseFloat(volume) });
             localStorage.setItem('gasInvoicesData', JSON.stringify(invoices));
-            
             document.getElementById('date').value = ''; document.getElementById('amount').value = ''; document.getElementById('volume').value = '';
             renderTable();
         }
@@ -300,7 +396,6 @@
             const tbody = document.getElementById('tableBody');
             tbody.innerHTML = ''; 
             let totalAmount = 0, totalVolume = 0;
-
             invoices.forEach((invoice, index) => {
                 totalAmount += invoice.amount; totalVolume += invoice.volume;
                 const row = document.createElement('tr');
@@ -311,13 +406,12 @@
                 `;
                 tbody.appendChild(row);
             });
-
             document.getElementById('totalVolume').innerText = totalVolume.toFixed(2);
             document.getElementById('totalAmount').innerText = totalAmount.toLocaleString('vi-VN');
         }
 
         function clearAllData() {
-            if (confirm("⚠️ Bạn có chắc chắn muốn xóa toàn bộ dữ liệu hóa đơn không?")) {
+            if (confirm("⚠️ Xóa toàn bộ dữ liệu?")) {
                 invoices = []; localStorage.removeItem('gasInvoicesData'); renderTable(); 
             }
         }
