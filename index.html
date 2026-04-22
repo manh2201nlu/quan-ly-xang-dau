@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quản lý Hóa đơn Xăng Dầu - V19 (Structural NLP Engine)</title>
+    <title>Quản lý Hóa đơn Xăng Dầu - V20 (Universal NLP)</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
@@ -54,7 +54,7 @@
         <div class="upload-section">
             <label for="pdfUpload" class="upload-label">📁 Chọn Hóa đơn điện tử hoặc Ảnh Scan (.PDF)</label>
             <input type="file" id="pdfUpload" accept=".pdf" multiple onchange="handlePDFUpload(event)">
-            <div id="scanStatus">Sẵn sàng. (Bản V19 - Công nghệ Quét Sinh Học NLP)</div>
+            <div id="scanStatus">Sẵn sàng. (Bản V20 - Đa Ngôn Ngữ & Điêzen)</div>
         </div>
 
         <div id="debugLog"></div>
@@ -133,14 +133,14 @@
             dbg.innerHTML += `<div class="debug-title">--- ${title} ---</div>${safeText}<br><br>`;
         }
 
-        // HÀM CÂN BẰNG TOÁN HỌC (LOẠI BỎ SAI SỐ THẬP PHÂN CỦA MỌI LOẠI HÓA ĐƠN)
+        // HÀM CÂN BẰNG TOÁN HỌC TỰ ĐỘNG
         function testTriplet(vStr, pStr, tStr) {
             let pClean = parseInt(pStr.replace(/\D/g, ''));
             if (isNaN(pClean) || pClean === 0) return null;
             let pReal = pClean;
             while (pReal > 40000) pReal /= 10;
             while (pReal < 9000) pReal *= 10;
-            if (pReal < 9000 || pReal > 40000) return null; // Giá luôn từ 9k - 40k
+            if (pReal < 9000 || pReal > 40000) return null; 
 
             let tReal = parseInt(tStr.replace(/\D/g, ''));
             if (isNaN(tReal) || tReal === 0) return null;
@@ -155,7 +155,6 @@
             let bestDiff = Infinity;
             let bestV = vReal;
             
-            // Gióng hàng thập phân để triệt tiêu mọi sai số của Lít (VD: 70,000 -> 70)
             for(let i = -5; i <= 5; i++) {
                 let testV = vReal * Math.pow(10, i);
                 let diff = Math.abs(testV - expectedV) / expectedV;
@@ -165,13 +164,13 @@
                 }
             }
 
-            if (bestDiff < 0.05) { // Dung sai 5%
+            if (bestDiff < 0.05) { 
                 return { v: bestV, p: pReal, t: tReal };
             }
             return null;
         }
 
-        // LÕI XỬ LÝ NGÔN NGỮ TỰ NHIÊN (NLP REGEX)
+        // LÕI XỬ LÝ NGÔN NGỮ TỰ NHIÊN - V20 (UNIVERSAL)
         function extractDataFromText(chunkText) {
             const fullText = chunkText.replace(/\s+/g, " ");
             const textLower = fullText.toLowerCase();
@@ -181,32 +180,31 @@
             let amountVal = 0;
             let volumeVal = 0;
 
-            // 1. TÌM NGÀY
-            const dateMatch = textLower.match(/ng[aáàảãạâăäq]y\D*?(\d{1,2})\D*?th[aáàảãạâăä]ng\D*?(\d{1,2})\D*?n[aăâä]m\D*?(\d{4})/i) || textLower.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+            // 1. TÌM NGÀY (Chống nhiễu Hóa đơn Song Ngữ có chữ "date, month, year")
+            const dateMatch = textLower.match(/(?:ng[aáàảãạâăäq]y|date)\D{0,15}?(\d{1,2})\D{0,15}?(?:th[aáàảãạâăä]ng|month)\D{0,15}?(\d{1,2})\D{0,15}?(?:n[aăâä]m|year)\D{0,15}?(\d{4})/i) || textLower.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
             if (dateMatch) {
                 dateVal = dateMatch.length === 4 ? `${dateMatch[3]}-${dateMatch[2].padStart(2, '0')}-${dateMatch[1].padStart(2, '0')}` : "";
             }
 
-            // 2. TÌM SỐ LÍT TỪ KHÔNG GIAN BẢNG BIỂU (LOẠI BỎ HOÀN TOÀN SỐ NHÀ, SĐT)
+            // 2. TÌM SỐ LÍT TỪ KHÔNG GIAN BẢNG BIỂU
             let totalVol = 0;
             let sumLineTotals = 0;
             let hasXang = false;
             let hasDau = false;
 
-            // Quét đúng cấu trúc: [Tên Nhiên Liệu] -> [Lít] -> [Các con số nằm ngay phía sau]
-            const itemLineRegex = /(xăng|dầu\s*do|do\s*0\.05).{0,40}?(?:l[iíìỉĩị1l]t|lượng|sl)(.{5,120}?)(?=cộng|tổng|thuế|xăng|dầu|do\s*0\.05|$)/gi;
+            // VŨ KHÍ MỚI: Bổ sung "dầu", "điêzen", "diezen", "DO" để tóm gọn mọi loại nhiên liệu
+            const itemLineRegex = /(xăng|dầu|do\s*0\.05|do\s*0\.001|điêzen|diezen).{0,60}?(?:l[iíìỉĩị1l]t|lượng|sl|unit)(.{5,150}?)(?=cộng|tổng|thuế|xăng|dầu|do\s*0\.0|điêzen|diezen|$)/gi;
             let match;
             
             while ((match = itemLineRegex.exec(fullText)) !== null) {
                 let fuelName = match[1].toLowerCase();
                 if (fuelName.includes('xăng')) hasXang = true;
-                if (fuelName.includes('dầu') || fuelName.includes('do')) hasDau = true;
+                if (fuelName.includes('dầu') || fuelName.includes('do') || fuelName.includes('điêzen') || fuelName.includes('diezen')) hasDau = true;
 
                 let numChunk = match[2];
                 let nums = numChunk.match(/\b\d[\d.,]*\b/g) || [];
                 let foundValidTriplet = false;
 
-                // Thử mọi tổ hợp 3 số sát nhau để tìm ra Lít * Đơn_giá = Tiền
                 for (let i = 0; i < nums.length - 2; i++) {
                     for (let j = i + 1; j < nums.length - 1; j++) {
                         for (let k = j + 1; k < nums.length; k++) {
@@ -230,8 +228,8 @@
 
             volumeVal = Math.round(totalVol * 100) / 100;
 
-            // 3. TÌM TỔNG TIỀN THANH TOÁN (GRAND TOTAL)
-            const grandTotalRegex = /(?:tổng\s*cộng\s*tiền\s*thanh\s*toán|tổng\s*số\s*tiền\s*thanh\s*toán|tổng\s*tiền|tổng\s*cộng).{0,20}?(\d[\d.,]*\d|\d)/i;
+            // 3. TÌM TỔNG TIỀN (Chống nhiễu chữ "Total Payment")
+            const grandTotalRegex = /(?:tổng\s*cộng\s*tiền\s*thanh\s*toán|tổng\s*số\s*tiền\s*thanh\s*toán|tổng\s*tiền\s*thanh\s*toán|tổng\s*tiền|tổng\s*cộng).{0,60}?(\d[\d.,]*\d|\d)/i;
             let gtMatch = fullText.match(grandTotalRegex);
             if (gtMatch) {
                 let gtStr = gtMatch[1];
@@ -244,7 +242,6 @@
                 }
             }
 
-            // Nếu hóa đơn bị mờ chữ "Tổng thanh toán", tự động nội suy từ Tiền từng dòng:
             if (amountVal === 0 && sumLineTotals > 0) {
                 let allNums = fullText.match(/\b\d+(?:[.,]\d+){0,3}\b/g) || [];
                 let possibleGTs = [];
@@ -260,7 +257,7 @@
                 if (possibleGTs.length > 0) {
                     amountVal = Math.round(Math.max(...possibleGTs));
                 } else {
-                    amountVal = Math.round(sumLineTotals * 1.1); // Dự phòng cộng 10% VAT
+                    amountVal = Math.round(sumLineTotals * 1.08); // Dự phòng VAT 8% hoặc 10%
                 }
             }
 
@@ -297,14 +294,13 @@
                     const totalPages = pdf.numPages;
 
                     for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-                        statusDiv.innerText = `⚡ Đang quét NLP Trang ${pageNum}/${totalPages}...`;
+                        statusDiv.innerText = `⚡ Đang quét NLP Đa Ngôn Ngữ Trang ${pageNum}/${totalPages}...`;
                         statusDiv.style.color = "#2980b9";
 
                         const page = await pdf.getPage(pageNum);
                         const textContent = await page.getTextContent();
                         let rawText = textContent.items.map(item => item.str).join(" ").normalize("NFC");
                         
-                        // CỨU HỘ BẰNG AI NẾU LÀ ẢNH SCAN (< 50 KÝ TỰ)
                         if (rawText.replace(/\s+/g, '').length < 50) {
                             if (!ocrWorker) {
                                 ocrWorker = await Tesseract.createWorker('vie+eng', 1);
@@ -320,8 +316,7 @@
                             rawText = text.replace(/\n/g, " ");
                         }
 
-                        // THUẬT TOÁN PHÂN HẠCH (CẮT ĐÔI TRANG NẾU CÓ 2 HÓA ĐƠN TRỞ LÊN)
-                        let invoiceChunks = rawText.split(/(?=HÓA ĐƠN\s*GIÁ TRỊ GIA TĂNG|Ký hiệu\s*[:=]|CÔNG TY XĂNG DẦU)/i);
+                        let invoiceChunks = rawText.split(/(?=HÓA ĐƠN\s*GIÁ TRỊ GIA TĂNG|Ký hiệu\s*[:=]|CÔNG TY XĂNG DẦU|CÔNG TY CỔ PHẦN NHIÊN LIỆU)/i);
                         let validChunks = [];
                         let tempChunk = "";
                         
@@ -334,7 +329,6 @@
                         }
                         if (tempChunk.length > 200 && validChunks.length === 0) validChunks.push(tempChunk);
 
-                        // CHẠY BỘ ĐỌC NLP CHO TỪNG HÓA ĐƠN
                         for (let idx = 0; idx < validChunks.length; idx++) {
                             let chunkText = validChunks[idx];
                             let data = extractDataFromText(chunkText);
@@ -344,7 +338,7 @@
                                 successCount++;
                             } else {
                                 failCount++;
-                                showDebug(`V19 - TỪ CHỐI Trang ${pageNum} (Mảnh ${idx+1}/${validChunks.length})`, `Ngày: ${data.dateVal || 'X'}\nTiền: ${data.amountVal || 'X'}\nLít: ${data.volumeVal || 'X'}\n\n[DỮ LIỆU ĐÃ BÓC TÁCH]\n${chunkText.replace(/\s+/g, " ")}`);
+                                showDebug(`V20 - TỪ CHỐI Trang ${pageNum} (Mảnh ${idx+1}/${validChunks.length})`, `Ngày: ${data.dateVal || 'X'}\nTiền: ${data.amountVal || 'X'}\nLít: ${data.volumeVal || 'X'}\n\n[DỮ LIỆU ĐÃ BÓC TÁCH]\n${chunkText.replace(/\s+/g, " ")}`);
                             }
                         }
                     } 
@@ -363,7 +357,7 @@
             renderTable();
 
             if (failCount === 0) {
-                statusDiv.innerText = `✅ SIÊU VIỆT! V19 đã bóc tách chính xác tuyệt đối ${successCount} hóa đơn.`;
+                statusDiv.innerText = `✅ SIÊU VIỆT! V20 đã bóc tách chính xác tuyệt đối ${successCount} hóa đơn.`;
                 statusDiv.style.color = "#27ae60";
             } else {
                 statusDiv.innerText = `⚠️ Hoàn tất! Quét được ${successCount} hóa đơn. Lỗi ${failCount} mảnh (Xem log).`;
